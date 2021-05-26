@@ -56,9 +56,17 @@ mod tests {
     #[test]
     fn test_lists_share_same_tails() {
         let a = Rc::new(Cons(5, Rc::new(Cons(10, Rc::new(Nil)))));
-        let _b = Cons(3, Rc::clone(&a));
-        let _c = Cons(4, Rc::clone(&a));
+        let count_before = Rc::strong_count(&a);
+        let count_in;
+        {
+            let _b = Cons(3, Rc::clone(&a));
+            let _c = Cons(4, Rc::clone(&a));
+            count_in = Rc::strong_count(&a);
+        }
+        let count_after = Rc::strong_count(&a);
 
-        assert_eq!(Rc::strong_count(&a), 3);
+        assert_eq!(count_before, 1);
+        assert_eq!(count_in, 3);
+        assert_eq!(count_after, 1);
     }
 }
