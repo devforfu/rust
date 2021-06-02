@@ -16,6 +16,8 @@ fn main() {
             handle_connection(stream);
         });
     }
+
+    println!("Shutting down.");
 }
 
 fn read_template(name: &str) -> String {
