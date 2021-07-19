@@ -13,12 +13,26 @@ pub struct Cli {
     pub path: String,
 }
 
-pub fn read_lines(filename: &str) -> Result<io::Lines<io::BufReader<File>>>
-{
+pub fn read_lines(filename: &str) -> Result<io::Lines<io::BufReader<File>>> {
     let file = File::open(filename).with_context(|| {
         format!("could not read file `{}`", filename)
     })?;
     Ok(io::BufReader::new(file).lines())
+}
+
+pub fn find_word(lines: &Vec<&str>, word: &str, ignore_case: bool) -> Vec<usize> {
+    let mut matched: Vec<usize> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        match if ignore_case {
+            line.to_lowercase().find(&word.to_lowercase())
+        } else {
+            line.find(word)
+        } {
+            Some(_) => { matched.push(i); }
+            None => {}
+        }
+    }
+    matched
 }
 
 #[cfg(test)]
@@ -99,7 +113,6 @@ mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::RandomFactory;
 
     #[test]
     fn test_read_lines() -> Result<()> {
@@ -112,12 +125,57 @@ mod tests {
     }
 
     #[test]
-    fn test_find_matched_lines() -> Result<()> {
+    fn test_number_of_lines_is_correct() -> Result<()> {
         let test_path = utils::create_random_test_file(10, (8, 12));
 
         let lines: Vec<String> = read_lines(&test_path)?.map(|line| line.unwrap()).collect();
 
         assert_eq!(lines.len(), 10);
         Ok(())
+    }
+
+    #[test]
+    fn test_find_matched_substring() {
+        struct SearchTest {
+            name: &'static str,
+            ignore_case: bool,
+            word: &'static str,
+            expected: Vec<usize>,
+        }
+
+        let lines = vec!["The first line.", "And the second one.", "The very last line."];
+
+        let test_cases = vec![
+            SearchTest {
+                name: "case sensitive",
+                ignore_case: false,
+                word: "the",
+                expected: vec![1],
+            },
+            SearchTest {
+                name: "ignore case",
+                ignore_case: true,
+                word: "the",
+                expected: vec![0, 1, 2],
+            },
+            SearchTest {
+                name: "first and last (ignore case)",
+                ignore_case: true,
+                word: "line",
+                expected: vec![0, 2],
+            },
+            SearchTest {
+                name: "first and last (case sensitive)",
+                ignore_case: false,
+                word: "line",
+                expected: vec![0, 2],
+            }
+        ];
+
+        for test in test_cases {
+            let matched = find_word(&lines, test.word, test.ignore_case);
+
+            assert_eq!(matched, test.expected, "test case failed: {}", test.name);
+        }
     }
 }
