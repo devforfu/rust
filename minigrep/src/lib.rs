@@ -8,8 +8,8 @@ use structopt::StructOpt;
 pub struct Cli {
     /// The pattern to look for
     pub pattern: String,
+
     /// The path to the file to read
-    // #[structopt(parse(from_os_str))]
     pub path: String,
 }
 
@@ -24,64 +24,100 @@ pub fn read_lines(filename: &str) -> Result<io::Lines<io::BufReader<File>>>
 #[cfg(test)]
 mod utils {
     use std::fs::File;
-    use rand::{rngs::OsRng, seq::SliceRandom, Rng};
     use std::io::Write;
+    use std::str;
+    use rand::{Rng, rngs::OsRng};
+    use rand::prelude::SliceRandom;
 
     const WORDS: &'static [&'static str] = &include!("../res/words.json");
     const CHARS: &[u8] = b"abcdef0123456789";
 
-    pub fn get_file_name(size: u32) -> &'static str {
-        let mut rng = OsRng;
-        let n = CHARS.len();
-        let chars = (0..size).map(|_| {
-            let index = rng.gen_range(0..n);
-            &CHARS[index]
-        });
-        let filename = chars.join("");
-        filename
+    pub fn create_fixed_test_file(content: &str) -> String {
+        let mut factory = RandomFactory::new();
+        factory.tmp_file(content)
     }
 
-    pub fn create_fixed_test_file(path: &str, content: &str) {
-        let mut file = File::create(path).unwrap();
-        file.write_all(content.as_bytes()).unwrap();
+    pub fn create_random_test_file(n_lines: u32, words_per_line: (u32, u32)) -> String {
+        let mut factory = RandomFactory::new();
+        factory.random_tmp_file(n_lines, words_per_line)
     }
 
-    pub fn create_random_test_file(path: &str, n_lines: u32, words_per_line: (u32, u32)) {
-        let (min, max) = words_per_line;
+    /// Provides a set of methods to generate random data for testing.
+    pub struct RandomFactory {
+        rng: OsRng
+    }
 
-        let mut rng = OsRng;
+    impl RandomFactory {
+        pub fn new() -> RandomFactory {
+            RandomFactory { rng: OsRng }
+        }
 
-        let mut file = File::create(path).unwrap();
+        /// Generates a random hex string of requested `size`.
+        pub fn hex_string(&mut self, size: usize) -> String {
+            let n = CHARS.len();
+            let chars: Vec<u8> = (0..size).map(|_| CHARS[self.rng.gen_range(0..n)]).collect();
+            String::from(str::from_utf8(&chars).unwrap())
+        }
 
-        (0..n_lines).for_each(|_| {
-            let n_words = rng.gen_range(min..max + 1);
-            let words: Vec<String> =
-                (0..n_words)
-                    .map(|_| String::from(*WORDS.choose(&mut rng).unwrap()))
-                    .collect();
-            let line: String = words.join(" ");
-            file.write_all(line.as_bytes()).unwrap();
-        });
+        /// Creates a temporary file with a given `content` and random name and returns its path.
+        pub fn tmp_file(&mut self, content: &str) -> String {
+            let path = self.create_random_path();
+            let mut file = File::create(&path).unwrap();
+            file.write_all(content.as_bytes()).unwrap();
+            String::from(path)
+        }
+
+        /// Creates a temporary file with random content.
+        ///
+        /// The generated file has `n_lines` with a random number of words within `words_per_line` range.
+        pub fn random_tmp_file(&mut self, n_lines: u32, words_per_line: (u32, u32)) -> String {
+            let (min, max) = words_per_line;
+
+            let path = self.create_random_path();
+
+            let mut file = File::create(&path).unwrap();
+
+            (0..n_lines).for_each(|_| {
+                let n_words = self.rng.gen_range(min..max + 1);
+                let words: Vec<String> =
+                    (0..n_words)
+                        .map(|_| String::from(*WORDS.choose(&mut self.rng).unwrap()))
+                        .collect();
+                let line: String = format!("{}\n", words.join(" "));
+                file.write_all(line.as_bytes()).unwrap();
+            });
+
+            path
+        }
+
+        fn create_random_path(&mut self) -> String {
+            format!("/tmp/{}.txt", self.hex_string(20))
+        }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::RandomFactory;
 
     #[test]
     fn test_read_lines() -> Result<()> {
-        utils::create_fixed_test_file(TEST_FILE, "first\nsecond\nthird");
+        let test_path = utils::create_fixed_test_file("first\nsecond\nthird");
 
-        let lines: Vec<String> = read_lines(TEST_FILE)?.map(|line| line.unwrap()).collect();
+        let lines: Vec<String> = read_lines(&test_path)?.map(|line| line.unwrap()).collect();
 
         assert_eq!(lines, vec!["first", "second", "third"]);
         Ok(())
     }
 
     #[test]
-    fn test_find_matched_lines() {
-        utils::create_random_test_file(TEST_FILE, 10, (8, 12));
+    fn test_find_matched_lines() -> Result<()> {
+        let test_path = utils::create_random_test_file(10, (8, 12));
+
+        let lines: Vec<String> = read_lines(&test_path)?.map(|line| line.unwrap()).collect();
+
+        assert_eq!(lines.len(), 10);
+        Ok(())
     }
 }
