@@ -20,20 +20,48 @@ pub fn read_lines(filename: &str) -> Result<io::Lines<io::BufReader<File>>> {
     Ok(io::BufReader::new(file).lines())
 }
 
-pub fn find_word(lines: &Vec<&str>, word: &str, ignore_case: bool) -> Vec<usize> {
-    let mut matched: Vec<usize> = Vec::new();
-    for (i, line) in lines.iter().enumerate() {
-        match if ignore_case {
+pub struct Finder {
+    ignore_case: bool
+}
+
+#[derive(Debug)]
+pub struct Match {
+    line_no: usize,
+    offset: usize,
+    line: String,
+}
+
+impl Finder {
+    pub fn new() -> Finder {
+        Finder { ignore_case: true }
+    }
+
+    pub fn find<'a, I: 'a>(&'a self, lines: I, word: &'a str) -> impl std::iter::Iterator<Item=Match> + 'a
+    where I: std::iter::Iterator<Item=String>
+    {
+        let word = String::from(word);
+
+        lines.enumerate().filter_map(move |(i, line)| {
+            match self.find_word(&line, &word) {
+                Some(index) => Some(Match {
+                    line_no: i,
+                    offset: index,
+                    line: String::from(line),
+                }),
+                None => None
+            }
+        })
+    }
+
+    fn find_word(&self, line: &str, word: &str) -> Option<usize> {
+        if self.ignore_case {
             line.to_lowercase().find(&word.to_lowercase())
         } else {
             line.find(word)
-        } {
-            Some(_) => { matched.push(i); }
-            None => {}
         }
     }
-    matched
 }
+
 
 #[cfg(test)]
 mod utils {
@@ -173,9 +201,13 @@ mod tests {
         ];
 
         for test in test_cases {
-            let matched = find_word(&lines, test.word, test.ignore_case);
+            let finder = Finder { ignore_case: test.ignore_case };
 
-            assert_eq!(matched, test.expected, "test case failed: {}", test.name);
+            let iter = lines.iter().map(|x| String::from(*x));
+
+            let actual: Vec<usize> = finder.find(iter, test.word).map(|m| m.line_no).collect();
+
+            assert_eq!(actual, test.expected, "test case failed: {}", test.name);
         }
     }
 }
