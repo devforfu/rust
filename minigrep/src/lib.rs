@@ -1,6 +1,7 @@
-use anyhow::{Result, Context};
-use std::fs::File;
 use std::io::{self, BufRead};
+use std::iter::Iterator;
+use std::fs::File;
+use anyhow::{Result, Context};
 use structopt::StructOpt;
 
 /// Search for a pattern in a file and display the lines that contain it.
@@ -20,6 +21,7 @@ pub fn read_lines(filename: &str) -> Result<io::Lines<io::BufReader<File>>> {
     Ok(io::BufReader::new(file).lines())
 }
 
+#[derive(Copy, Clone)]
 pub struct Finder {
     ignore_case: bool
 }
@@ -36,20 +38,18 @@ impl Finder {
         Finder { ignore_case: true }
     }
 
-    pub fn find<'a, I: 'a>(&'a self, lines: I, word: &'a str) -> impl std::iter::Iterator<Item=Match> + 'a
-    where I: std::iter::Iterator<Item=String>
+    pub fn find<'a>(
+        self,
+        lines: impl Iterator<Item = String> + 'a,
+        word: &'a str
+    ) -> impl Iterator<Item = Match> + 'a
     {
-        let word = String::from(word);
-
-        lines.enumerate().filter_map(move |(i, line)| {
-            match self.find_word(&line, &word) {
-                Some(index) => Some(Match {
-                    line_no: i,
-                    offset: index,
-                    line: String::from(line),
-                }),
-                None => None
-            }
+        lines.enumerate().filter_map(move |(line_no, line)| {
+            self.find_word(&line, word).map(|offset| Match {
+                line_no,
+                offset,
+                line,
+            })
         })
     }
 
