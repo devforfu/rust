@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     let lines = read_lines(&args.path)?.map(|x| x.unwrap());
 
     for matched in f.find(lines, &args.pattern) {
-        println!("{:?}", matched);
+        println!("{}", matched);
     }
 
     Ok(())

@@ -3,6 +3,8 @@ use std::iter::Iterator;
 use std::fs::File;
 use anyhow::{Result, Context};
 use structopt::StructOpt;
+use std::fmt;
+use std::fmt::Formatter;
 
 /// Search for a pattern in a file and display the lines that contain it.
 #[derive(Debug, StructOpt)]
@@ -28,9 +30,15 @@ pub struct Finder {
 
 #[derive(Debug)]
 pub struct Match {
-    line_no: usize,
-    offset: usize,
-    line: String,
+    pub line_no: usize,
+    pub offset: usize,
+    pub line: String,
+}
+
+impl fmt::Display for Match {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.line)
+    }
 }
 
 impl Finder {
