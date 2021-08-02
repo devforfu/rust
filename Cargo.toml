@@ -15,6 +15,7 @@ members = [
     "oop",
     "advanced",
     "web",
+    "mandelbrot",
 ]
 
 [dependencies]
