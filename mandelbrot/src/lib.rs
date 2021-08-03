@@ -1,6 +1,94 @@
 //! Mandelbrot set example from Programming Rust 2nd Edition (2021)
-use std::str::FromStr;
 use num::Complex;
+use std::str::FromStr;
+
+pub mod parser {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+
+    /// Parse complex number from string or return error if format is wrong.
+    pub fn complex_from_str(s: &str) -> Result<Complex<f64>, Error> {
+        parse_complex(s.trim_matches(|c| c == '"')).ok_or_else(
+            || Error::new(
+                ErrorKind::InvalidData,
+                format!("wrong input format: {}", s)
+            )
+        )
+    }
+
+    /// Parse output image bounds from string or return error if format is wrong.
+    pub fn bounds_from_str(s: &str) -> Result<(usize, usize), Error> {
+        parse_pair(s, 'x').ok_or_else(
+            || Error::new(
+                ErrorKind::InvalidData,
+                format!("wrong image size format: {}", s)
+            )
+        )
+    }
+
+}
+
+pub mod renderer {
+    use super::*;
+    use image::ColorType;
+    use image::codecs::png::PngEncoder;
+    use std::fs::File;
+
+    /// Render a rectangle of the Mandelbrot set into a buffer of pixels.
+    ///
+    /// The `bounds` argument gives the which holds one grayscale `pixels`,
+    /// which holds one grayscale pixel per byte. The `upper_left` and `lower_right`
+    /// arguments specify points on the complex plane corresponding to the upper-
+    /// left and lower-right corners of the pixel buffer.
+    pub fn render(
+        pixels: &mut [u8],
+        bounds: (usize, usize),
+        upper_left: Complex<f64>,
+        lower_right: Complex<f64>
+    ) {
+        assert_eq!(pixels.len(), bounds.0 * bounds.1);
+
+        for row in 0..bounds.1 {
+            for column in 0..bounds.0 {
+                let point = pixel_to_point(
+                    bounds, (column, row),
+                    upper_left, lower_right
+                );
+                pixels[row * bounds.0 + column] =
+                    match escape_time(point, 255) {
+                        None => 0,
+                        Some(count) => 255 - count as u8
+                    };
+            }
+        }
+    }
+
+    /// Write the buffer `pixels`, whose dimensions are given by `bounds`, to the
+    /// file named `filename`.
+    pub fn write_image(
+        filename: &str,
+        pixels: &[u8],
+        bounds: (usize, usize)
+    ) -> Result<(), std::io::Error> {
+        let output = File::create(filename)?;
+
+        let encoder = PngEncoder::new(output);
+
+        match encoder.encode(
+            &pixels,
+            bounds.0 as u32, bounds.1 as u32,
+            ColorType::L8
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData, err.to_string()
+                )
+            )
+        }
+    }
+
+}
 
 /// Try to determine if `c` is in the Mandelbrot set, using at most `limit`
 /// iterations to decide.
@@ -77,44 +165,15 @@ fn pixel_to_point(
     }
 }
 
-/// Render a rectangle of the Mandelbrot set into a buffer of pixels.
-///
-/// The `bounds` argument gives the which holds one grayscale `pixels`,
-/// which holds one grayscale pixel per byte. The `upper_left` and `lower_right`
-/// arguments specify points on the complex plane corresponding to the upper-
-/// left and lower-right corners of the pixel buffer.
-fn render(
-    pixels: &mut [u8],
-    bounds: (usize, usize),
-    upper_left: Complex<f64>,
-    lower_right: Complex<f64>
-) {
-    assert_eq!(pixels.len(), bounds.0 * bounds.1);
-
-    for row in 0..bounds.1 {
-        for column in 0..bounds.0 {
-            let point = pixel_to_point(
-                bounds, (column, row),
-                upper_left, lower_right
-            );
-            pixels[row * bounds.0 + column] =
-                match escape_time(point, 255) {
-                    None => 0,
-                    Some(count) => 255 - count as u8
-                };
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
 
     #[rstest]
-    #[case( 3.0, 4.0, 1, None)]
-    #[case(-1.0, 2.5, 5, Some(1))]
-    #[case( 0.9, 0.8, 6, Some(2))]
+    #[case(3.0, 4.0, 1, None)]
+    #[case(- 1.0, 2.5, 5, Some(1))]
+    #[case(0.9, 0.8, 6, Some(2))]
     fn test_escape_time(
         #[case] re: f64,
         #[case] im: f64,
@@ -136,7 +195,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case("1.25,-0.0625", Some(Complex { re: 1.25, im: -0.0625 }))]
+    #[case("1.25,-0.0625", Some(Complex { re: 1.25, im: - 0.0625 }))]
     #[case("1,2", Some(Complex { re: 1.0, im: 2.0 }))]
     #[case(",-0.0625", None)]
     fn test_parse_complex(#[case] s: &str, #[case] num: Option<Complex<f64>>) {
@@ -147,8 +206,8 @@ mod tests {
     fn test_pixel_to_point() {
         assert_eq!(
             pixel_to_point((100, 200), (25, 175),
-                           Complex { re: -1.0, im:  1.0 },
-                           Complex { re:  1.0, im: -1.0 }),
+                           Complex { re: -1.0, im: 1.0 },
+                           Complex { re: 1.0, im: -1.0 }),
             Complex { re: -0.5, im: -0.75 }
         )
     }
@@ -158,8 +217,11 @@ mod tests {
         let mut actual = vec![0; 9];
         let expected = vec![252, 250, 252, 244, 0, 0, 244, 0, 0];
 
-        render(&mut actual, (3, 3), Complex { re: -1.0, im: 1.0}, Complex { re: 1.0, im: -1.0 });
+        renderer::render(&mut actual, (3, 3),
+                         Complex { re: -1.0, im: 1.0 },
+                         Complex { re: 1.0, im: -1.0 });
 
         assert_eq!(actual, expected);
     }
+
 }
