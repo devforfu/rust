@@ -1,4 +1,5 @@
 //! Mandelbrot set example from Programming Rust 2nd Edition (2021)
+use log::debug;
 use num::Complex;
 use std::str::FromStr;
 
@@ -30,6 +31,7 @@ pub mod parser {
 
 pub mod renderer {
     use super::*;
+    use crossbeam;
     use image::ColorType;
     use image::codecs::png::PngEncoder;
     use std::fs::File;
@@ -48,6 +50,8 @@ pub mod renderer {
     ) {
         assert_eq!(pixels.len(), bounds.0 * bounds.1);
 
+        debug!("rendering pixels in bounds: {:?}", bounds);
+
         for row in 0..bounds.1 {
             for column in 0..bounds.0 {
                 let point = pixel_to_point(
@@ -60,6 +64,40 @@ pub mod renderer {
                         Some(count) => 255 - count as u8
                     };
             }
+        }
+    }
+
+    /// The same as `render` but multithreaded.
+    pub fn parallel_render(
+        pixels: &mut [u8],
+        bounds: (usize, usize),
+        upper_left: Complex<f64>,
+        lower_right: Complex<f64>,
+        n_threads: usize,
+    ) {
+        let rows_per_band = bounds.1 / n_threads + 1;
+
+        debug!("parallel rendering: n_threads={}, rows_per_band={}", n_threads, rows_per_band);
+
+        {
+            let bands: Vec<&mut [u8]> =
+                pixels.chunks_mut(rows_per_band * bounds.0).collect();
+            crossbeam::scope(|spawner| {
+                for (i, band) in bands.into_iter().enumerate() {
+                    debug!("processing band: {}", i);
+                    let top = rows_per_band * i;
+                    let height = band.len() / bounds.0;
+                    let band_bounds = (bounds.0, height);
+                    let band_upper_left =
+                        pixel_to_point(bounds, (0, top), upper_left, lower_right);
+                    let band_lower_right =
+                        pixel_to_point(bounds, (bounds.0, top + height),
+                                       upper_left, lower_right);
+                    spawner.spawn(move |_| {
+                        render(band, band_bounds, band_upper_left, band_lower_right);
+                    });
+                }
+            }).unwrap();
         }
     }
 
