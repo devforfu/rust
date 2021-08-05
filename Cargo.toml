@@ -16,6 +16,7 @@ members = [
     "advanced",
     "web",
     "mandelbrot",
+    "overloading",
 ]
 
 [dependencies]
