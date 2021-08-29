@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 pub enum BinaryTree<T> {
     Empty,
     NonEmpty(Box<TreeNode<T>>),
@@ -9,28 +11,37 @@ pub struct TreeNode<T> {
     right: BinaryTree<T>,
 }
 
+#[derive(Debug)]
 pub enum TraverseMethod {
+    PreOrder,
     InOrder,
+    PostOrder,
+}
+
+trait Visitor {
+    type Element;
+    fn visit(&self, element: Self::Element);
 }
 
 impl <T: Ord> BinaryTree<T> {
-    fn add(&mut self, value: T) {
+    fn add(&mut self, value: T) -> &mut Self {
         match *self {
             BinaryTree::Empty => {
                 *self = BinaryTree::NonEmpty(Box::new(TreeNode {
                     element: value,
                     left: BinaryTree::Empty,
                     right: BinaryTree::Empty,
-                }))
+                }));
             },
             BinaryTree::NonEmpty(ref mut node) => {
                 if value <= node.element {
-                    node.left.add(value)
+                    node.left.add(value);
                 } else {
-                    node.right.add(value)
+                    node.right.add(value);
                 }
             }
         }
+        self
     }
 
     /// Returns the number of nodes in a tree.
@@ -44,6 +55,25 @@ impl <T: Ord> BinaryTree<T> {
     }
 }
 
+struct VectorVisitor<T> {
+    vec: RefCell<Vec<T>>
+}
+
+impl<T> VectorVisitor<T> {
+    fn new(capacity: usize) -> Self {
+        VectorVisitor { vec: RefCell::new(Vec::with_capacity(capacity)) }
+    }
+}
+
+impl<T> Visitor for VectorVisitor<T> {
+    type Element = T;
+
+    fn visit(&self, element: T) {
+        self.vec.borrow_mut().push(element);
+    }
+}
+
+
 impl <T: Ord + Clone> BinaryTree<T> {
 
     /// Transforms a tree into a vector.
@@ -51,35 +81,36 @@ impl <T: Ord + Clone> BinaryTree<T> {
     /// Vector elements are automatically sorted as it is constructed by traversing the
     /// tree in order.
     pub fn to_vec(&self) -> Vec<T> {
-        let mut vec = Vec::with_capacity(self.num_of_nodes());
-        self.travers_tree(&mut vec, &TraverseMethod::InOrder);
-        vec
+        let visitor = VectorVisitor::new(self.num_of_nodes());
+        self.traverse(&visitor, &TraverseMethod::InOrder);
+        visitor.vec.take()
     }
 
-    fn travers_tree(&self, vec: &mut Vec<T>, order: &TraverseMethod) {
+    fn traverse<V: Visitor<Element = T>>(&self, visitor: &V, order: &TraverseMethod) {
         match self {
             BinaryTree::Empty => {},
             BinaryTree::NonEmpty(node) => {
                 match order {
-                    // TraverseMethod::PreOrder => {
-                    //     vec.push(node.element.clone());
-                    //     node.left.travers_tree(vec, order);
-                    //     node.right.travers_tree(vec, order);
-                    // }
-                    TraverseMethod::InOrder => {
-                        node.left.travers_tree(vec, order);
-                        vec.push(node.element.clone());
-                        node.right.travers_tree(vec, order);
+                    TraverseMethod::PreOrder => {
+                        visitor.visit(node.element.clone());
+                        node.left.traverse(visitor, order);
+                        node.right.traverse(visitor, order);
                     },
-                    // TraverseMethod::PostOrder => {
-                    //     node.left.travers_tree(vec, order);
-                    //     node.right.travers_tree(vec, order);
-                    //     vec.push(node.element.clone());
-                    // }
+                    TraverseMethod::InOrder => {
+                        node.left.traverse(visitor, order);
+                        visitor.visit(node.element.clone());
+                        node.right.traverse(visitor, order);
+                    },
+                    TraverseMethod::PostOrder => {
+                        node.left.traverse(visitor, order);
+                        node.right.traverse(visitor, order);
+                        visitor.visit(node.element.clone());
+                    }
                 }
             }
         }
     }
+
 }
 
 #[cfg(test)]
@@ -122,4 +153,26 @@ mod tests {
         assert_eq!(tree.to_vec(), vec![1, 3, 5, 7, 9]);
     }
 
+    #[test]
+    fn test_tree_traverse() -> Result<(), String> {
+        let mut tree = BinaryTree::Empty;
+
+        tree.add(5).add(1).add(3).add(2).add(4);
+
+        for (order, expected) in vec![
+            (TraverseMethod::PreOrder, vec![5, 1, 3, 2, 4]),
+            (TraverseMethod::InOrder, vec![1, 2, 3, 4, 5]),
+            (TraverseMethod::PostOrder, vec![2, 4, 3, 1, 5])
+        ] {
+            let visitor = VectorVisitor::new(tree.num_of_nodes());
+            tree.traverse(&visitor, &order);
+            let actual = visitor.vec.take();
+
+            if actual != expected {
+                return Err(format!("failed traverse order {:?}: {:?} != {:?}", order, actual, expected));
+            }
+        }
+
+        Ok(())
+    }
 }
