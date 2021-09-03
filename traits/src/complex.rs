@@ -10,8 +10,8 @@ impl<T> Complex<T> {
 }
 
 impl<T> Add for Complex<T>
-where
-    T: Add<Output = T>
+    where
+        T: Add<Output = T>
 {
     type Output = Self;
 
@@ -24,8 +24,8 @@ where
 }
 
 impl<T> Sub for Complex<T>
-where
-    T: Sub<Output = T>
+    where
+        T: Sub<Output = T>
 {
     type Output = Self;
 
@@ -39,7 +39,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::Complex;
+    use super::Complex;
 
     #[test]
     fn test_complex_creation() {
